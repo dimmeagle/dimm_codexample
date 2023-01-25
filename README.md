@@ -1,1 +1,1 @@
-# dimm_codexample
+Example piece of code from the project
