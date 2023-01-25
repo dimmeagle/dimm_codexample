@@ -1,0 +1,257 @@
+<?php
+
+// Module variables:
+define('PKR_LOCK_EXPIRES', 'perepel_karaokeru_lock_expires');
+define('PKR_LAST_UPDATE_TIME', 
+'perepel_karaokeru_last_update_time');
+define('PKR_LAST_UPDATE_ID', 'perepel_karaokeru_last_update_id');
+define('PKR_LAST_UPDATE_EXPIRED_TIME', 
+'perepel_karaokeru_last_update_expired_time');
+define('PKR_UPDATE_LIMIT', 'perepel_karaokeru_update_limit');
+
+define('PKR_CRON_ENABLED', 'perepel_karaokeru_cron_enabled');
+define('PKR_CRON_LOG_MESSAGES', 
+'perepel_karaokeru_cron_log_messages');
+define('PKR_CRON_UPDATE_LIMIT', 
+'perepel_karaokeru_cron_update_limit');
+define('PKR_CRON_TIME_LIMIT', 
+'perepel_karaokeru_cron_time_limit');
+define('PKR_CRON_LAST_RUN', 'perepel_karaokeru_cron_last_run');
+define('PKR_CRON_LAST_UPDATES_PROCESSED', 
+'perepel_karaokeru_cron_last_updates_processed');
+
+/**
+ * Implements hook_requirements()
+ */
+function perepel_karaokeru_requirements($phase) {
+  $requirements = array();
+  $gdExists = false;
+  if (function_exists('gd_info')) {
+    $info = gd_info();
+    if (strpos($info['GD Version'], '2.') !== false) $gdExists = 
+true;
+  }
+  if (!$gdExists)
+    $requirements['perepel_karaokeru_gd'] = array(
+      'title' => 'Графическая библиотека GD',
+      'description' => 'Требуется библиотека GD версии 2.x.',
+      'severity' => REQUIREMENT_WARNING,
+    );
+  return $requirements;
+}
+
+/**
+ * Implements hook_menu()
+ */
+function perepel_karaokeru_menu() {
+  $items['admin/content/karaokeru'] = array(
+    'title' => t('Karaoke.ru'),
+    'description' => t('Karaoke.ru Importer'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('perepel_karaokeru_import_form'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 4,
+    'file' => 'perepel_karaokeru.importer.inc',
+    'file path' => drupal_get_path('module', 'perepel_karaokeru'),
+  );
+  $items['admin/content/karaokeru/overview'] = array(
+    'title' => t('Обзор'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('perepel_karaokeru_import_form'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 0,
+    'file' => 'perepel_karaokeru.importer.inc',
+    'file path' => drupal_get_path('module', 'perepel_karaokeru'),
+  );
+  $items['admin/content/karaokeru/config'] = array(
+    'title' => t('Настройка'),
+    'description' => t('Настройка автоматической синхронизации 
+песен.'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('perepel_karaokeru_config_form'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1,
+    'file' => 'perepel_karaokeru.importer.inc',
+    'file path' => drupal_get_path('module', 'perepel_karaokeru'),
+  );
+  return $items;
+}
+
+function perepel_karaokeru_cronapi($op, $job = NULL) {
+  $items = array();
+  $items['update_songs'] = array(
+    'description' => 'Update songs from Karaoke.ru.',
+    'rule' => '*/10 * * * *', // Run this job every 10 minutes.
+    'callback' => 'perepel_karaokeru_update_songs',
+  );
+  $items['update_expired_songs'] = array(
+    'description' => 'Update expired songs from Karaoke.ru.',
+    'rule' => '*/60 * * * *', // Run this job every 10 minutes.
+    'callback' => 'perepel_karaokeru_expired_worker',
+  );  
+  $items['check_expired_songs'] = array(
+    'description' => 'Check current songs for expiration',
+    'rule' => '0 3 * * *', // Run this job every 10 minutes.
+    'callback' => 'perepel_karaokeru_check_expired_worker',
+  );  
+  
+  return $items;
+}
+
+function perepel_karaokeru_cron () {
+
+	
+	$queue = DrupalQueue::get('perepel_karaokeru_expired_update');
+
+  $operations = array();
+  $batchSongs = array();
+    $batchSongs[] = 1;
+	  	$operations = $batchSongs;
+	  	$queue->createItem($operations);
+	  	$batchSongs = array();	
+	
+}
+
+function perepel_karaokeru_cron_queue_info() {
+  $queues['perepel_karaokeru_artists'] = array(
+    'worker callback' => 'perepel_karaokeru_worker',
+    'time' => 60,
+  );
+ $queues['perepel_karaokeru_catalogue'] = array(
+    'worker callback' => 'perepel_karaokeru_catalogue_worker',
+    'time' => 60,
+  );
+ 
+  return $queues;
+}
+
+function perepel_karaokeru_worker ($data) {
+		require_once('perepel_karaokeru.importer.inc');
+	  $sessionID = PerepelKaraokeru::initConnection();
+	  $url = PerepelKaraokeru::$_url;
+	  $i = 0;
+	  foreach ($data as $song) {
+	  	$i++;
+	  $object = PerepelKaraokeru::getSongDataNEW($song, 
+$sessionID);
+	  $populate = PerepelKaraokeru::populateAuthors($object);	  
+  }
+  }
+
+function perepel_karaokeru_catalogue_worker ($data) {
+		require_once('perepel_karaokeru.importer.inc');
+	  $sessionID = PerepelKaraokeru::initConnection();
+	  $url = PerepelKaraokeru::$_url;
+	  $i = 0;
+	  foreach ($data as $song) {
+	  	$i++;
+	  $object = PerepelKaraokeru::getSongDataNEW($song['id'], 
+$sessionID);
+	  $dataUpdate = PerepelKaraokeru::getNewSong($object);
+	  if ($dataUpdate != 2) {
+		  $importResult = PerepelKaraokeru::importNewSong 
+($dataUpdate);
+		 } 
+  }
+  variable_set(PKR_LAST_UPDATE_TIME, time());
+  }
+
+function perepel_karaokeru_expired_worker () {
+		require_once('perepel_karaokeru.importer.inc');
+	  $sessionID = PerepelKaraokeru::initConnection();
+	  $url = PerepelKaraokeru::$_url;
+	  $query = db_select('karaokeru_songs_20', 's');
+				
+$query->fields('s',array('karaoke_id', 'end_date'));
+				$query->condition ('end_date', 
+time(), '<');
+				$expire = 
+$query->execute()->fetchAll();
+				
+	  if (!empty($expire)) {
+	  	$i = 0;
+	  	foreach ($expire as $song) {
+		  	$object = 
+PerepelKaraokeru::getSongDataNEW('sng-' . $song->karaoke_id, 
+$sessionID);
+		  	$object = json_decode($object, TRUE);
+		  	$object = $object[0];
+
+		  	if ($object['expire_at'] > $song->end_date 
+&& !is_null($object['expire_at'])) {
+			  	
+		  	$expire_time = 
+is_null($object['expire_at']) ? 0 : 
+strtotime($object['expire_at']);
+			$update = db_update ('karaokeru_songs_20')
+				->fields(array(
+					'end_date' => 
+$expire_time,
+					'karaoke_updated_at' => 
+strtotime($object['updated_at']),
+					'sync_date' => time(),
+				))
+				->condition('karaoke_id', 
+$song->karaoke_id, '=')
+				->execute();
+		  	}
+  $i++;
+	  }
+	  }
+  variable_set(PKR_LAST_UPDATE_TIME, time());
+  }
+  
+  function perepel_karaokeru_check_expired_worker () {
+	  require_once('perepel_karaokeru.importer.inc');
+	  perepel_karaokeru_check_expire_submit ();
+	  
+  }
+
+function perepel_karaokeru_update_songs() {
+  $updateLimit = variable_get(PKR_CRON_UPDATE_LIMIT, 200);
+  $processTimeLimit = variable_get(PKR_CRON_TIME_LIMIT, 40);
+  require_once('perepel_karaokeru.importer.inc');
+  if (PerepelKaraokeru::getLock($processTimeLimit*2)) {
+    set_time_limit(300);
+    $endTime = time() + $processTimeLimit;
+    $processed = 0;
+    $added = 0;
+    $updated = 0;
+    try {
+      $songs = PerepelKaraokeru::getUpdatedSongs($updateLimit);
+      foreach ($songs as $song) {
+        if (time() < $endTime) {
+          try {
+            $updateResult = 
+PerepelKaraokeru::processSongUpdate($song);
+            if ($updateResult == PerepelKaraokeru::urAdded) 
+$added++;
+            elseif ($updateResult == PerepelKaraokeru::urUpdated) 
+$updated++;
+          } catch (Exception $e) {
+            watchdog('perepel_karaokeru', 'update_songs cron job: 
+' . $e->getMessage(), array(), WATCHDOG_ERROR);
+          }
+          variable_set(PKR_LAST_UPDATE_TIME, $song['updated_at']);
+          variable_set(PKR_LAST_UPDATE_ID, $song['id']);
+          $processed++;
+        } else break;
+      }
+      variable_set(PKR_CRON_LAST_RUN, time());
+      variable_set(PKR_CRON_LAST_UPDATES_PROCESSED, $processed);
+      if (variable_get(PKR_CRON_LOG_MESSAGES, 0))
+        watchdog('perepel_karaokeru',
+          sprintf('[%s] update_songs job: processed %d songs (%d 
+added, %d updated).', date('H:i:s'), $processed, $added, 
+$updated),
+          array(), WATCHDOG_INFO);
+    } catch (Exception $e) {
+      watchdog('perepel_karaokeru', 'update_songs cron job: ' . 
+$e->getMessage(), array(), WATCHDOG_ERROR);
+    }
+    PerepelKaraokeru::releaseLock();
+  }
+}

@@ -1,0 +1,74 @@
+<?php
+
+function perepel_karaokeru_schema() {
+	$schema['perepel_karaokeru_songs'] = array(
+      'description' => 'Additional data for songs imported from 
+Karaoke.ru',
+      'fields' => array(
+        'nid' => array(
+          'type' => 'int',
+          'unsigned' => true,
+          'not null' => true,
+          'size' => 'big',
+        ),
+        'karaoke_id' => array(
+          'type' => 'int',
+          'unsigned' => true,
+          'not null' => true,
+          'size' => 'big',
+        ),
+        'end_date' => array(
+          'type' => 'int',
+          'not null' => false,
+          'size' => 'big',
+        ),
+        'scenario_urlkey' => array(
+          'type' => 'varchar',
+          'length' => 255,
+          'not null' => true,
+        ),
+        'karaoke_updated_at' => array(
+          'type' => 'int',
+          'size' => 'big',
+        ),
+        'sync_date' => array(
+          'type' => 'int',
+          'not null' => true,
+          'size' => 'big',
+        ),
+      ),
+      'primary key' => array('nid'),
+      'foreign keys' => array(
+        'fk_perepel_karaokeru_songs_node' => array(
+          'table' => 'node',
+          'columns' => array('nid' => 'nid'),
+        ),
+      ),
+      'unique keys' => array(
+        'uk_perepel_karaokeru_songs_karaoke_id' => 
+array('karaoke_id'),
+      ),
+      'indexes' => array(
+        'idx_perepel_karaokeru_songs_karaoke_id' => 
+array('karaoke_id'),
+        'idx_perepel_karaokeru_songs_end_date' => 
+array('end_date'),
+        'idx_perepel_karaokeru_songs_sync_date' => 
+array('sync_date'),
+      ),
+	);
+	return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function perepel_karaokeru_install() {
+  // Make real foreign keys.
+  db_query('
+    ALTER TABLE perepel_karaokeru_songs
+    ADD CONSTRAINT fk_perepel_karaokeru_songs_node
+    FOREIGN KEY (nid) REFERENCES node (nid)
+    ON DELETE CASCADE
+  ');
+}

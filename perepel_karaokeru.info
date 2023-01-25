@@ -1,0 +1,12 @@
+name = Karaoke.ru Importer
+description = Provides importing songs from a database of the 
+partner service
+
+core = 7.x
+
+package = Perepel
+version = 7.x-1.1
+
+;configure = admin/config/karaokeru_config
+
+dependencies[] = elysia_cron
